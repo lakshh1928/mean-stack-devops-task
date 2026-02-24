@@ -1,14 +1,12 @@
-name: Build
+name: Build and Deploy
 
 on:
-  push: 
-    branches: master
+  push:
+    branches: [ master ]
 
 jobs:
   build-push:
     runs-on: ubuntu-latest
-
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -19,10 +17,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Install BuildX
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build & Push
+      - name: Build & Push Frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
@@ -30,8 +25,7 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/ddfrontend:latest
 
-
-      - name: Build & Push (backend)
+      - name: Build & Push Backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
@@ -39,39 +33,31 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/ddbackend:latest
 
-
   deploy:
-    needs: build-push
     runs-on: ubuntu-latest
-
+    needs: build-push
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup ssh
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-
-      - name: Copy docker-compose to EC2
+      - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yml,frontend/nginx.conf" 
+          source: "docker-compose.yml,nginx.conf"
+          target: "~/app"
 
-      - name: Execute Remote Commands
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            sudo apt-get update -y
-            docker builder prune -f
             cd ~/app
-            docker compose pull
-            docker compose up -d --force-recreate
-            docker image prune -af
+            sudo docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            sudo docker compose pull
+            sudo docker compose up -d --remove-orphans
+            sudo docker image prune -f
