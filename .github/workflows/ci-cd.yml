@@ -61,7 +61,6 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "docker-compose.yml,frontend/nginx.conf" 
-          target: "~/app"
 
       - name: Execute Remote Commands
         uses: appleboy/ssh-action@v1.0.3
